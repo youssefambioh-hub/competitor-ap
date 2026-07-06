@@ -71,17 +71,17 @@ def render_filter_widgets(key_prefix):
     st.markdown('<div class="filter-wrap">', unsafe_allow_html=True)
     fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([2, 1.3, 1.3, 1.5, 0.8, 1.1])
     with fc1:
-        search_q = st.text_input("", placeholder="🔍  Search clinic name or area…", label_visibility="collapsed", key=f"{key_prefix}_search")
+        search_q = st.text_input("Search Clinics", placeholder="🔍  Search clinic name or area…", label_visibility="collapsed", key=f"{key_prefix}_search")
     with fc2:
-        f_area = st.selectbox("", AREA_OPTIONS, label_visibility="collapsed", key=f"{key_prefix}_area")
+        f_area = st.selectbox("Select Area", AREA_OPTIONS, label_visibility="collapsed", key=f"{key_prefix}_area")
     with fc3:
-        f_threat = st.selectbox("", ["All Threats", "5 — Critical", "4 — High", "3 — Medium", "2 — Low", "1 — Minimal"], label_visibility="collapsed", key=f"{key_prefix}_threat")
+        f_threat = st.selectbox("Select Threat Level", ["All Threats", "5 — Critical", "4 — High", "3 — Medium", "2 — Low", "1 — Minimal"], label_visibility="collapsed", key=f"{key_prefix}_threat")
     with fc4:
-        f_ins = st.selectbox("", ["All Insurances"] + INSURANCE_OPTIONS, label_visibility="collapsed", key=f"{key_prefix}_ins")
+        f_ins = st.selectbox("Select Insurance", ["All Insurances"] + INSURANCE_OPTIONS, label_visibility="collapsed", key=f"{key_prefix}_ins")
     with fc5:
         show_us = st.checkbox("Ours only", key=f"{key_prefix}_us")
     with fc6:
-        sort_by = st.selectbox("", ["Sort: Threat ↓", "Sort: Rating ↓", "Sort: Reviews ↓", "Sort: Score ↓", "Sort: A–Z"], label_visibility="collapsed", key=f"{key_prefix}_sort")
+        sort_by = st.selectbox("Sort By", ["Sort: Threat ↓", "Sort: Rating ↓", "Sort: Reviews ↓", "Sort: Score ↓", "Sort: A–Z"], label_visibility="collapsed", key=f"{key_prefix}_sort")
     st.markdown('</div>', unsafe_allow_html=True)
     return search_q, f_area, f_threat, f_ins, show_us, sort_by
 
