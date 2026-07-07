@@ -27,20 +27,6 @@ def _load_private_key() -> bytes:
         encryption_algorithm=NoEncryption(),
     )
 
-# Removed @st.cache_resource so it doesn't keep a stale connection open forever
-def get_snowflake_connection():
-    pkb = _load_private_key()
-    conn = snowflake.connector.connect(
-        user=config.SF_USER,
-        account=config.SF_ACCOUNT,
-        warehouse=config.SF_WAREHOUSE,
-        database=config.SF_DATABASE,
-        schema=config.SF_SCHEMA,
-        role=config.SF_ROLE,
-        private_key=pkb,
-    )
-    return conn
-
 def _combine_hours(open_val, close_val) -> str:
     o = str(open_val).strip()
     c = str(close_val).strip()
@@ -55,20 +41,25 @@ def _combine_hours(open_val, close_val) -> str:
 
 @st.cache_data(show_spinner="Loading clinic data…", ttl=300)
 def load_data():
-    # Open connection
-    conn = get_snowflake_connection()
+    pkb = _load_private_key()
     
-    try:
+    # Using 'with' forces the connection to fully close and clear immediately after getting data
+    with snowflake.connector.connect(
+        user=config.SF_USER,
+        account=config.SF_ACCOUNT,
+        warehouse=config.SF_WAREHOUSE,
+        database=config.SF_DATABASE,
+        schema=config.SF_SCHEMA,
+        role=config.SF_ROLE,
+        private_key=pkb,
+    ) as conn:
         query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
-        cur = conn.cursor()
-        cur.execute(query)
-        rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-        cur.close()
-    finally:
-        # ALWAYS close the connection after getting the data to prevent token expiration
-        conn.close()
+        with conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
 
+    # At this point, the connection to Snowflake is 100% closed safely.
     df = pd.DataFrame(rows, columns=columns).fillna("")
     df = df.rename(columns=config.SF_COL_RENAMES)
 
