@@ -23,8 +23,7 @@ def _load_private_key() -> bytes:
         encryption_algorithm=NoEncryption(),
     )
 
-# Cache connection for 4 minutes only (expires BEFORE Snowflake token expires)
-@st.cache_resource(ttl=240)
+# 🚨 تم إزالة @st.cache_resource تماماً من هنا
 def get_snowflake_connection():
     pkb = _load_private_key()
     return snowflake.connector.connect(
@@ -54,22 +53,14 @@ def _combine_hours(open_val, close_val) -> str:
 def load_data():
     query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
     
-    try:
-        conn = get_snowflake_connection()
-        cur = conn.cursor()
-        cur.execute(query)
-        rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-        cur.close()
-    except Exception as e:
-        # 🚨 MAGIC FIX: If token expired or connection failed, Nuke the cache and force a 100% fresh connection!
-        st.cache_resource.clear()
-        conn = get_snowflake_connection()
-        cur = conn.cursor()
-        cur.execute(query)
-        rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-        cur.close()
+    # استخدام 'with' بيضمن إن الاتصال يتقفل ويتدمر فوراً بعد جلب البيانات
+    with get_snowflake_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            
+    # في السطر ده، الاتصال بقاعدة البيانات أصبح مقفول 100% ومستحيل يعمل Expire
 
     df = pd.DataFrame(rows, columns=columns).fillna("")
     df = df.rename(columns=config.SF_COL_RENAMES)
