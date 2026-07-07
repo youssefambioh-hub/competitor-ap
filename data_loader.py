@@ -27,7 +27,7 @@ def _load_private_key() -> bytes:
         encryption_algorithm=NoEncryption(),
     )
 
-@st.cache_resource(show_spinner="Connecting to Snowflake…")
+# Removed @st.cache_resource so it doesn't keep a stale connection open forever
 def get_snowflake_connection():
     pkb = _load_private_key()
     conn = snowflake.connector.connect(
@@ -55,13 +55,19 @@ def _combine_hours(open_val, close_val) -> str:
 
 @st.cache_data(show_spinner="Loading clinic data…", ttl=300)
 def load_data():
+    # Open connection
     conn = get_snowflake_connection()
-    query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
-    cur = conn.cursor()
-    cur.execute(query)
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    cur.close()
+    
+    try:
+        query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
+        cur = conn.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]
+        cur.close()
+    finally:
+        # ALWAYS close the connection after getting the data to prevent token expiration
+        conn.close()
 
     df = pd.DataFrame(rows, columns=columns).fillna("")
     df = df.rename(columns=config.SF_COL_RENAMES)
