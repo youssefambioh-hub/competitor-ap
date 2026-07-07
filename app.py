@@ -224,7 +224,7 @@ def render_sidebar(name):
         <div class="sb-sch">{boxes}</div></div>
         """, unsafe_allow_html=True)
         st.markdown('<div style="margin-top:16px;"></div>', unsafe_allow_html=True)
-        if st.button("📋  Open Full Profile →", key="sb_full", use_container_width=True):
+        if st.button("📋  Open Full Profile →", key="sb_full", width="stretch"):
             open_clinic(name)
 
 # ── TOP NAV ───────────────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ if st.session_state.page == "profile" and st.session_state.clinic:
                 xaxis=dict(range=[0, 5.5], dtick=1, tickfont_size=10, gridcolor="#F1F5F9"),
                 yaxis=dict(tickfont_size=10), bargap=0.35, showlegend=False,
             )
-            st.plotly_chart(fig_rb, use_container_width=True, config={"displayModeBar": False}, theme=None)
+            st.plotly_chart(fig_rb, width="stretch", config={"displayModeBar": False}, theme=None)
             st.markdown("</div></div>", unsafe_allow_html=True)
         with cr:
             sa = adf.sort_values("_rating", ascending=False).reset_index(drop=True)
@@ -576,7 +576,7 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
-if st.button("🗺️  OPEN LIVE MARKET MAP  →", type="primary", use_container_width=True, key="goto_map_btn"): go_map()
+if st.button("🗺️  OPEN LIVE MARKET MAP  →", type="primary", width="stretch", key="goto_map_btn"): go_map()
 
 st.write("")
 st.markdown('<div class="sec-hdr"><div class="sec-title">Market Analytics</div><div class="sec-pill">NYC Physical Therapy Landscape</div></div>', unsafe_allow_html=True)
@@ -584,20 +584,20 @@ st.markdown('<div class="sec-hdr"><div class="sec-title">Market Analytics</div><
 ch1, ch2, ch3 = st.columns([1, 1.35, 1.35])
 with ch1:
     st.markdown('<div class="chart-card"><div class="chart-hdr"><span class="chart-hdr-title">Threat Distribution</span><span class="chart-hdr-sub">all competitors</span></div><div class="chart-body">', unsafe_allow_html=True)
-    st.plotly_chart(charts.chart_threat_donut(df), use_container_width=True, config={"displayModeBar": False}, theme=None)
+    st.plotly_chart(charts.chart_threat_donut(df), width="stretch", config={"displayModeBar": False}, theme=None)
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 with ch2:
     st.markdown('<div class="chart-card"><div class="chart-hdr"><span class="chart-hdr-title">Clinics by Borough</span><span class="chart-hdr-sub">PT of the City vs competitors</span></div><div class="chart-body">', unsafe_allow_html=True)
     fb = charts.chart_borough_breakdown(df)
-    if fb: st.plotly_chart(fb, use_container_width=True, config={"displayModeBar": False}, theme=None)
+    if fb: st.plotly_chart(fb, width="stretch", config={"displayModeBar": False}, theme=None)
     else: st.markdown('<div style="padding:20px;color:#94A3B8;text-align:center;">No data</div>', unsafe_allow_html=True)
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 with ch3:
     st.markdown('<div class="chart-card"><div class="chart-hdr"><span class="chart-hdr-title">Top 20 Competitors</span><span class="chart-hdr-sub">by review count · color = threat level</span></div><div class="chart-body">', unsafe_allow_html=True)
     ft = charts.chart_top20_reviews(df)
-    if ft: st.plotly_chart(ft, use_container_width=True, config={"displayModeBar": False}, theme=None)
+    if ft: st.plotly_chart(ft, width="stretch", config={"displayModeBar": False}, theme=None)
     else: st.markdown('<div style="padding:20px;color:#94A3B8;text-align:center;">No data</div>', unsafe_allow_html=True)
     st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -678,7 +678,7 @@ for i, (_, row) in enumerate(fdf.iterrows()):
     c6.markdown(f'<div class="row-cell">{bdg}</div>', unsafe_allow_html=True)
     with c7:
         st.write("")
-        if st.button("View →", key=f"v_{name}_{i}", use_container_width=True): open_clinic(name)
+        if st.button("View →", key=f"v_{name}_{i}", width="stretch"): open_clinic(name)
     if i < len(fdf) - 1:
         st.markdown('<div class="div-row"></div>', unsafe_allow_html=True)
 

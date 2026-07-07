@@ -8,14 +8,10 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 import config
 
 def _load_private_key() -> bytes:
-    # 1. Check if we are in production (Railway Environment Variable)
     pem_env = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
-    
     if pem_env:
-        # Railway might pass newlines as literal '\n', so we fix them and encode to bytes
         pem_data = pem_env.replace("\\n", "\n").encode("utf-8")
     else:
-        # 2. Fallback to local file path for local development
         with open(config.PRIVATE_KEY_PATH, "rb") as f:
             pem_data = f.read()
 
@@ -25,6 +21,21 @@ def _load_private_key() -> bytes:
         encoding=Encoding.DER,
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
+    )
+
+# Cache connection for 4 minutes only (expires BEFORE Snowflake token expires)
+@st.cache_resource(ttl=240)
+def get_snowflake_connection():
+    pkb = _load_private_key()
+    return snowflake.connector.connect(
+        user=config.SF_USER,
+        account=config.SF_ACCOUNT,
+        warehouse=config.SF_WAREHOUSE,
+        database=config.SF_DATABASE,
+        schema=config.SF_SCHEMA,
+        role=config.SF_ROLE,
+        private_key=pkb,
+        client_session_keep_alive=False
     )
 
 def _combine_hours(open_val, close_val) -> str:
@@ -41,25 +52,25 @@ def _combine_hours(open_val, close_val) -> str:
 
 @st.cache_data(show_spinner="Loading clinic data…", ttl=300)
 def load_data():
-    pkb = _load_private_key()
+    query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
     
-    # Using 'with' forces the connection to fully close and clear immediately after getting data
-    with snowflake.connector.connect(
-        user=config.SF_USER,
-        account=config.SF_ACCOUNT,
-        warehouse=config.SF_WAREHOUSE,
-        database=config.SF_DATABASE,
-        schema=config.SF_SCHEMA,
-        role=config.SF_ROLE,
-        private_key=pkb,
-    ) as conn:
-        query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
-        with conn.cursor() as cur:
-            cur.execute(query)
-            rows = cur.fetchall()
-            columns = [desc[0] for desc in cur.description]
+    try:
+        conn = get_snowflake_connection()
+        cur = conn.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]
+        cur.close()
+    except Exception as e:
+        # 🚨 MAGIC FIX: If token expired or connection failed, Nuke the cache and force a 100% fresh connection!
+        st.cache_resource.clear()
+        conn = get_snowflake_connection()
+        cur = conn.cursor()
+        cur.execute(query)
+        rows = cur.fetchall()
+        columns = [desc[0] for desc in cur.description]
+        cur.close()
 
-    # At this point, the connection to Snowflake is 100% closed safely.
     df = pd.DataFrame(rows, columns=columns).fillna("")
     df = df.rename(columns=config.SF_COL_RENAMES)
 
