@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
    PT OF THE CITY — COMPETITIVE INTELLIGENCE DASHBOARD
-   Style System v4.0  |  Railway-Ready Edition
+   Style System v4.1  |  Railway-Ready Edition (White Text Hotfix)
    Typeface: Inter (display) + system-ui (utility)
    Palette: Navy command (#0B1628) · Signal blue (#2563EB) ·
             Ice (#EDF2FB) · Slate (#64748B) · Emerald (#10B981)
@@ -1354,4 +1354,36 @@ button { transition: all .14s ease; }
   }
 
   .live-dot { animation: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FIX: WHITE TEXT ON WHITE BACKGROUND (Streamlit UI elements)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Fix Input Fields (Search box, Select boxes, and Dropdown menus) */
+div[data-baseweb="input"] input,
+div[data-baseweb="select"] *,
+div[data-baseweb="popover"] * {
+    color: #0F1E3D !important;
+}
+
+/* Fix Placeholder text color */
+div[data-baseweb="input"] input::placeholder {
+    color: #94A3B8 !important;
+}
+
+/* 2. Fix Tabs Text Color (Intelligence, Services, etc.) */
+button[data-baseweb="tab"] p {
+    color: #64748B !important; /* Unselected tab text */
+}
+
+button[data-baseweb="tab"][aria-selected="true"] p {
+    color: #2563EB !important; /* Selected tab text (Blue) */
+    font-weight: 700 !important;
+}
+
+/* 3. Fix Checkbox text color (e.g., "Ours only") */
+div[data-testid="stCheckbox"] p,
+div[data-testid="stCheckbox"] label {
+    color: #0F1E3D !important;
 }
