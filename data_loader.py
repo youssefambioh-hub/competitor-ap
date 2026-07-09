@@ -53,7 +53,7 @@ def _combine_hours(open_val, close_val) -> str:
 def load_data():
     query = f'SELECT * FROM "{config.SF_DATABASE}"."{config.SF_SCHEMA}"."{config.SF_TABLE}"'
     
-    # 🚨 نظام إعادة المحاولة الذكي (Bulletproof Retry)
+    #  
     max_retries = 3
     rows = None
     columns = None
@@ -67,16 +67,16 @@ def load_data():
             rows = cur.fetchall()
             columns = [desc[0] for desc in cur.description]
             cur.close()
-            break  # نجاح! هنخرج من الـ Loop
+            break  #   
             
         except Exception as e:
             error_msg = str(e)
-            # لو المشكلة بسبب انتهاء الصلاحية، هنستنى ثانية ونحاول تاني باتصال جديد
+            #  
             if "390114" in error_msg or "expired" in error_msg:
                 time.sleep(1)
                 continue
             else:
-                # لو مشكلة تانية (زي إن الباسورد غلط)، هنظهرها
+                #  ا
                 raise e
         finally:
             if conn is not None:
@@ -85,11 +85,11 @@ def load_data():
                 except:
                     pass
                     
-    # لو بعد 3 محاولات لسه بيفشل
+    #  
     if rows is None:
         raise Exception("Failed to load data from Snowflake after 3 retries. Please check database connection.")
 
-    # --- معالجة البيانات ---
+    # ---   ---
     df = pd.DataFrame(rows, columns=columns).fillna("")
     df = df.rename(columns=config.SF_COL_RENAMES)
 

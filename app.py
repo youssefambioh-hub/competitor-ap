@@ -4,6 +4,7 @@ import pandas as pd
 import folium
 import plotly.graph_objects as go
 from streamlit_folium import st_folium
+import math
 
 import config
 from data_loader import load_data
@@ -21,7 +22,7 @@ st.set_page_config(
 with open("style.css", "r", encoding="utf-8") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# ── Load Data ─────────────────────────────────────────────────────────────────
+# ── Load Data ──────────────────────────────────────────────────────────────
 try:
     df = load_data()
 except Exception as e:
@@ -46,9 +47,16 @@ def get_insurance_options(df_in):
 
 AREA_OPTIONS      = ["All Areas"] + sorted([a for a in df["Neighborhood / Area"].unique() if a])
 INSURANCE_OPTIONS = get_insurance_options(df)
+ALL_CLINIC_NAMES  = sorted([n for n in df["Clinic Name"].unique() if n])
 
-# ── Session State & Navigation ────────────────────────────────────────────────
-for key, default in [("page", "dashboard"), ("clinic", None), ("selected_clinic", None)]:
+# ── Session State & Navigation ─────────────────────────────────────────────
+for key, default in [
+    ("page", "dashboard"),
+    ("clinic", None),
+    ("selected_clinic", None),
+    ("compare_a", None),
+    ("compare_b", None),
+]:
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -65,6 +73,10 @@ def go_dash():
 
 def go_map():
     st.session_state.page = "map"
+    st.rerun()
+
+def go_compare():
+    st.session_state.page = "compare"
     st.rerun()
 
 def render_filter_widgets(key_prefix):
@@ -182,6 +194,7 @@ def render_sidebar(name):
         spec_html  = f"<div class='sb-f' style='margin-top:6px;'><div class='sb-f-lbl'>Specializations</div><div class='sb-tags'>{helpers.tags_html(spec,sb=True)}</div></div>" if spec != "—" else ""
         equip_html = f"<div class='sb-f' style='margin-top:6px;'><div class='sb-f-lbl'>Equipment</div><div class='sb-tags'>{helpers.tags_html(equip,sb=True)}</div></div>" if equip != "—" else ""
         langs_html = f"<div class='sb-f' style='margin-top:6px;'><div class='sb-f-lbl'>Languages</div><div class='sb-tags'>{helpers.tags_html(langs,sb=True)}</div></div>" if langs != "—" else ""
+
         st.markdown(f"""
         <div class="sb-sec"><div class="sb-sec-title">⚕️ Services</div>
         <div class="sb-row">
@@ -215,6 +228,7 @@ def render_sidebar(name):
                 f'<div class="sb-day-n">{dn}</div>'
                 f'<div class="sb-day-v" style="white-space:pre-wrap;">{disp}</div></div>'
             )
+
         st.markdown(f"""
         <div class="sb-sec"><div class="sb-sec-title">🕐 Schedule</div>
         <div class="sb-row" style="margin-bottom:8px;">
@@ -224,13 +238,18 @@ def render_sidebar(name):
         <div class="sb-sch">{boxes}</div></div>
         """, unsafe_allow_html=True)
         st.markdown('<div style="margin-top:16px;"></div>', unsafe_allow_html=True)
-        if st.button("📋  Open Full Profile →", key="sb_full", width="stretch"):
+        if st.button("📋  Open Full Profile →", key="sb_full", use_container_width=True):
             open_clinic(name)
 
 # ── TOP NAV ───────────────────────────────────────────────────────────────────
-if st.session_state.page == "dashboard": page_label = "Market Intelligence"
-elif st.session_state.page == "map": page_label = "Live Map"
-else: page_label = st.session_state.clinic or ""
+if st.session_state.page == "dashboard":
+    page_label = "Market Intelligence"
+elif st.session_state.page == "map":
+    page_label = "Live Map"
+elif st.session_state.page == "compare":
+    page_label = "Clinic Compare"
+else:
+    page_label = st.session_state.clinic or ""
 
 st.markdown(f"""
 <div class="topnav">
@@ -242,6 +261,363 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  COMPARE PAGE
+# ═══════════════════════════════════════════════════════════════════════════
+if st.session_state.page == "compare":
+    st.markdown('<div class="page-wrap">', unsafe_allow_html=True)
+    bc, _ = st.columns([1, 4])
+    with bc:
+        if st.button("← Back to Dashboard", key="cmp_back"): go_dash()
+
+    # ── Header ──
+    st.markdown("""
+    <div class="cmp-hero">
+        <div class="cmp-hero-icon">⚔️</div>
+        <div>
+            <div class="cmp-hero-title">Clinic Head-to-Head</div>
+            <div class="cmp-hero-sub">Select any two clinics to reveal a full side-by-side competitive breakdown</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Selector row ──
+    st.markdown('<div class="cmp-selector-wrap">', unsafe_allow_html=True)
+    col_a, col_vs, col_b = st.columns([5, 1, 5])
+    with col_a:
+        st.markdown('<div class="cmp-selector-label cmp-label-a">⚔ Clinic A</div>', unsafe_allow_html=True)
+        default_a = ALL_CLINIC_NAMES.index(st.session_state.compare_a) if st.session_state.compare_a in ALL_CLINIC_NAMES else 0
+        chosen_a  = st.selectbox("Clinic A", ALL_CLINIC_NAMES, index=default_a, label_visibility="collapsed", key="cmp_sel_a")
+    with col_vs:
+        st.markdown('<div class="cmp-vs-badge">VS</div>', unsafe_allow_html=True)
+    with col_b:
+        st.markdown('<div class="cmp-selector-label cmp-label-b">⚔ Clinic B</div>', unsafe_allow_html=True)
+        default_b_idx = 1 if len(ALL_CLINIC_NAMES) > 1 else 0
+        if st.session_state.compare_b in ALL_CLINIC_NAMES:
+            default_b_idx = ALL_CLINIC_NAMES.index(st.session_state.compare_b)
+        chosen_b = st.selectbox("Clinic B", ALL_CLINIC_NAMES, index=default_b_idx, label_visibility="collapsed", key="cmp_sel_b")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Persist selections
+    st.session_state.compare_a = chosen_a
+    st.session_state.compare_b = chosen_b
+
+    if chosen_a == chosen_b:
+        st.markdown('<div class="cmp-same-warning">⚠️ Please select two different clinics to compare.</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.stop()
+
+    ra = df[df["Clinic Name"] == chosen_a].iloc[0]
+    rb = df[df["Clinic Name"] == chosen_b].iloc[0]
+
+    # ── Helper: get float safely ──
+    def fv(row, col):
+        try:
+            val = row.get(col, "")
+            if pd.isna(val) or str(val).strip().lower() in ("nan", "none", ""):
+                return None
+            val_float = float(str(val).replace(",", "").strip())
+            if math.isnan(val_float):
+                return None
+            return val_float
+        except Exception:
+            return None
+
+    def sv(row, col):
+        v = row.get(col, "")
+        return str(v).strip() if pd.notna(v) and str(v).strip().lower() not in ("", "nan", "none") else "—"
+
+    # ── Winner logic ──
+    def winner(va, vb, higher_is_better=True):
+        """Returns 'a', 'b', or 'tie'"""
+        if va is None and vb is None: return "tie"
+        if va is None: return "b"
+        if vb is None: return "a"
+        if va == vb:   return "tie"
+        return ("a" if va > vb else "b") if higher_is_better else ("a" if va < vb else "b")
+
+    # Pre-compute metric values
+    rat_a  = fv(ra, "_rating");        rat_b  = fv(rb, "_rating")
+    rev_a  = fv(ra, "_reviews");       rev_b  = fv(rb, "_reviews")
+    gs_a   = fv(ra, "_google_score");  gs_b   = fv(rb, "_google_score")
+    thr_a  = fv(ra, "_threat");        thr_b  = fv(rb, "_threat")
+    hrs_a  = fv(ra, "Total Hrs/Wk");   hrs_b  = fv(rb, "Total Hrs/Wk")
+    wknd_a = fv(ra, "Weekend Hrs/Wk"); wknd_b = fv(rb, "Weekend Hrs/Wk")
+    dist_a = fv(ra, "Distance from PTotC (mi)"); dist_b = fv(rb, "Distance from PTotC (mi)")
+
+    w_rat  = winner(rat_a,  rat_b)
+    w_rev  = winner(rev_a,  rev_b)
+    w_gs   = winner(gs_a,   gs_b)
+    w_thr  = winner(thr_a,  thr_b, higher_is_better=False)
+    w_hrs  = winner(hrs_a,  hrs_b)
+    w_wknd = winner(wknd_a, wknd_b)
+    w_dist = winner(dist_a, dist_b, higher_is_better=False)
+
+    score_a = sum(1 for w in [w_rat,w_rev,w_gs,w_thr,w_hrs,w_wknd] if w == "a")
+    score_b = sum(1 for w in [w_rat,w_rev,w_gs,w_thr,w_hrs,w_wknd] if w == "b")
+
+    overall_winner = "a" if score_a > score_b else ("b" if score_b > score_a else "tie")
+
+    def crown(side):
+        return "👑 " if overall_winner == side else ""
+
+    # ── Overall winner banner ──
+    if overall_winner == "tie":
+        ow_html = f"""
+        <div class="cmp-banner cmp-banner-tie">
+            <div class="cmp-banner-icon">🤝</div>
+            <div class="cmp-banner-txt">
+                <div class="cmp-banner-title">It's a Draw</div>
+                <div class="cmp-banner-sub">{chosen_a} and {chosen_b} are evenly matched across key metrics</div>
+            </div>
+        </div>"""
+    elif overall_winner == "a":
+        ow_html = f"""
+        <div class="cmp-banner cmp-banner-a">
+            <div class="cmp-banner-icon">👑</div>
+            <div class="cmp-banner-txt">
+                <div class="cmp-banner-title">{chosen_a} Wins</div>
+                <div class="cmp-banner-sub">Leads on {score_a} of 6 metrics vs {score_b} for {chosen_b}</div>
+            </div>
+        </div>"""
+    else:
+        ow_html = f"""
+        <div class="cmp-banner cmp-banner-b">
+            <div class="cmp-banner-icon">👑</div>
+            <div class="cmp-banner-txt">
+                <div class="cmp-banner-title">{chosen_b} Wins</div>
+                <div class="cmp-banner-sub">Leads on {score_b} of 6 metrics vs {score_a} for {chosen_a}</div>
+            </div>
+        </div>"""
+    st.markdown(ow_html, unsafe_allow_html=True)
+
+    # ── Stat strip ──
+    def stat_chip(label, val_a, val_b, w, fmt_a=None, fmt_b=None):
+        fa = fmt_a if fmt_a else (f"{val_a}" if val_a is not None else "—")
+        fb = fmt_b if fmt_b else (f"{val_b}" if val_b is not None else "—")
+        cls_a = "cmp-chip-win" if w == "a" else ("cmp-chip-lose" if w == "b" else "")
+        cls_b = "cmp-chip-win" if w == "b" else ("cmp-chip-lose" if w == "a" else "")
+        win_a = "🏅 " if w == "a" else ""
+        win_b = "🏅 " if w == "b" else ""
+        return f"""
+        <div class="cmp-chip">
+            <div class="cmp-chip-val {cls_a}">{win_a}{fa}</div>
+            <div class="cmp-chip-lbl">{label}</div>
+            <div class="cmp-chip-val {cls_b}">{win_b}{fb}</div>
+        </div>"""
+
+    chips_html = (
+        stat_chip("⭐ Rating",      rat_a,  rat_b,  w_rat,  f"{rat_a:.1f}" if rat_a is not None else "—", f"{rat_b:.1f}" if rat_b is not None else "—") +
+        stat_chip("💬 Reviews",     rev_a,  rev_b,  w_rev,  f"{int(rev_a):,}" if rev_a is not None else "—", f"{int(rev_b):,}" if rev_b is not None else "—") +
+        stat_chip("📊 Google Score",gs_a,   gs_b,   w_gs,   f"{gs_a:.2f}" if gs_a is not None else "—", f"{gs_b:.2f}" if gs_b is not None else "—") +
+        stat_chip("⚠️ Threat",      thr_a,  thr_b,  w_thr,  f"{int(thr_a)}/5" if thr_a is not None else "—", f"{int(thr_b)}/5" if thr_b is not None else "—") +
+        stat_chip("⏰ Total Hrs/Wk",hrs_a,  hrs_b,  w_hrs,  f"{hrs_a:.0f}h" if hrs_a is not None else "—", f"{hrs_b:.0f}h" if hrs_b is not None else "—") +
+        stat_chip("📅 Weekend Hrs", wknd_a, wknd_b, w_wknd, f"{wknd_a:.0f}h" if wknd_a is not None else "—", f"{wknd_b:.0f}h" if wknd_b is not None else "—")
+    )
+
+    st.markdown(f"""
+    <div class="cmp-chips-header">
+        <div class="cmp-chip-name cmp-chip-name-a">{crown('a')}{chosen_a}</div>
+        <div class="cmp-chip-name cmp-chip-name-mid">Metric</div>
+        <div class="cmp-chip-name cmp-chip-name-b">{crown('b')}{chosen_b}</div>
+    </div>
+    <div class="cmp-chips">{chips_html}</div>
+    """, unsafe_allow_html=True)
+
+    # ── Radar chart ──
+    metrics_radar = ["Rating", "Reviews (norm)", "Google Score", "Hrs/Wk (norm)", "Weekend Hrs (norm)"]
+    def norm(val, max_val):
+        if val is None or max_val == 0: return 0
+        return min(round((val / max_val) * 5, 2), 5)
+
+    max_rev  = max(rev_a or 0, rev_b or 0, 1)
+    max_hrs  = max(hrs_a or 0, hrs_b or 0, 1)
+    max_wknd = max(wknd_a or 0, wknd_b or 0, 1)
+
+    vals_a = [rat_a or 0, norm(rev_a, max_rev), gs_a or 0, norm(hrs_a, max_hrs), norm(wknd_a, max_wknd)]
+    vals_b = [rat_b or 0, norm(rev_b, max_rev), gs_b or 0, norm(hrs_b, max_hrs), norm(wknd_b, max_wknd)]
+
+    fig_radar = go.Figure()
+    fig_radar.add_trace(go.Scatterpolar(
+        r=vals_a + [vals_a[0]], theta=metrics_radar + [metrics_radar[0]],
+        fill="toself", name=chosen_a[:28],
+        line=dict(color="#F0B429", width=2),
+        fillcolor="rgba(240,180,41,.15)",
+        marker=dict(color="#F0B429", size=7),
+    ))
+    fig_radar.add_trace(go.Scatterpolar(
+        r=vals_b + [vals_b[0]], theta=metrics_radar + [metrics_radar[0]],
+        fill="toself", name=chosen_b[:28],
+        line=dict(color="#A8B8FF", width=2),
+        fillcolor="rgba(168,184,255,.13)",
+        marker=dict(color="#A8B8FF", size=7),
+    ))
+    fig_radar.update_layout(
+        polar=dict(
+            bgcolor="rgba(17,20,51,.6)",
+            radialaxis=dict(visible=True, range=[0,5], tickfont=dict(color="#5A6090", size=9), gridcolor="rgba(201,146,10,.12)", linecolor="rgba(201,146,10,.12)"),
+            angularaxis=dict(tickfont=dict(color="#CDD5F3", size=11), linecolor="rgba(201,146,10,.15)", gridcolor="rgba(201,146,10,.1)"),
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter", color="#CDD5F3"),
+        legend=dict(font=dict(color="#CDD5F3", size=11), bgcolor="rgba(17,20,51,.6)", bordercolor="rgba(201,146,10,.2)", borderwidth=1),
+        margin=dict(l=40, r=40, t=40, b=40),
+        height=380,
+    )
+
+    # ── Bar comparison chart ──
+    bar_labels  = ["Rating (/5)", "Google Score", "Threat (/5)"]
+    bar_vals_a  = [rat_a or 0, gs_a or 0, thr_a or 0]
+    bar_vals_b  = [rat_b or 0, gs_b or 0, thr_b or 0]
+
+    fig_bar = go.Figure()
+    fig_bar.add_trace(go.Bar(
+        name=chosen_a[:24], x=bar_labels, y=bar_vals_a,
+        marker=dict(color="rgba(240,180,41,.85)", line=dict(color="#F0B429", width=1)),
+        hovertemplate="<b>%{x}</b><br>" + chosen_a[:24] + ": %{y:.2f}<extra></extra>",
+    ))
+    fig_bar.add_trace(go.Bar(
+        name=chosen_b[:24], x=bar_labels, y=bar_vals_b,
+        marker=dict(color="rgba(168,184,255,.85)", line=dict(color="#A8B8FF", width=1)),
+        hovertemplate="<b>%{x}</b><br>" + chosen_b[:24] + ": %{y:.2f}<extra></extra>",
+    ))
+    fig_bar.update_layout(
+        barmode="group", bargap=0.25, bargroupgap=0.08,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter", color="#CDD5F3"),
+        xaxis=dict(tickfont=dict(color="#CDD5F3", size=11), gridcolor="rgba(201,146,10,.08)", linecolor="rgba(201,146,10,.15)"),
+        yaxis=dict(tickfont=dict(color="#5A6090", size=10), gridcolor="rgba(201,146,10,.08)", zeroline=False, linecolor="rgba(201,146,10,.15)"),
+        legend=dict(font=dict(color="#CDD5F3", size=11), bgcolor="rgba(17,20,51,.6)", bordercolor="rgba(201,146,10,.2)", borderwidth=1),
+        margin=dict(l=20, r=20, t=20, b=20),
+        height=380,
+    )
+
+    ch_l, ch_r = st.columns(2)
+    with ch_l:
+        st.markdown('<div class="chart-card"><div class="chart-hdr"><span class="chart-hdr-title">Performance Radar</span><span class="chart-hdr-sub">normalized 0–5 scale</span></div><div class="chart-body">', unsafe_allow_html=True)
+        st.plotly_chart(fig_radar, use_container_width=True, config={"displayModeBar": False}, theme=None)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    with ch_r:
+        st.markdown('<div class="chart-card"><div class="chart-hdr"><span class="chart-hdr-title">Key Metrics Comparison</span><span class="chart-hdr-sub">side-by-side bars</span></div><div class="chart-body">', unsafe_allow_html=True)
+        st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False}, theme=None)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
+    st.write("")
+
+    # ── Deep comparison cards ──
+    def cmp_row(label, val_a, val_b, w=None):
+        """Render one detail row without markdown-breaking indentation"""
+        cls_a = "cmp-detail-win" if w == "a" else ""
+        cls_b = "cmp-detail-win" if w == "b" else ""
+        badge_a = '<span class="cmp-win-dot"></span>' if w == "a" else ""
+        badge_b = '<span class="cmp-win-dot cmp-win-dot-b"></span>' if w == "b" else ""
+        return (
+f'<div class="cmp-detail-row">'
+f'<div class="cmp-detail-cell cmp-detail-a {cls_a}">{badge_a}{val_a}</div>'
+f'<div class="cmp-detail-label">{label}</div>'
+f'<div class="cmp-detail-cell cmp-detail-b {cls_b}">{badge_b}{val_b}</div>'
+f'</div>'
+        )
+
+    def tags_compare(val):
+        if not val or val == "—": return '<span style="color:#5A6090;">—</span>'
+        items = [t.strip() for t in str(val).replace(";",",").split(",") if t.strip() and t.strip().lower() not in ("nan","none","")]
+        return " ".join(f'<span class="cmp-tag">{t}</span>' for t in items[:8])
+
+    # Section: Identity
+    identity_rows = (
+        cmp_row("🏙️ Area",       sv(ra,"Neighborhood / Area"), sv(rb,"Neighborhood / Area")) +
+        cmp_row("📍 Address",     sv(ra,"Address"),            sv(rb,"Address")) +
+        cmp_row("📞 Phone",       sv(ra,"Phone"),              sv(rb,"Phone")) +
+        cmp_row("🌐 Website",     sv(ra,"Website"),            sv(rb,"Website")) +
+        cmp_row("🏢 Parent Org",  sv(ra,"Parent Organization"),sv(rb,"Parent Organization")) +
+        cmp_row("📅 Founded",     sv(ra,"Founded / Est."),     sv(rb,"Founded / Est.")) +
+        cmp_row("🔗 Chain Size",  sv(ra,"Chain_Size"),         sv(rb,"Chain_Size"))
+    )
+
+    # Section: Scores
+    scores_rows = (
+        cmp_row("⭐ Google Rating",   f"{rat_a:.1f}"  if rat_a is not None else "—", f"{rat_b:.1f}"  if rat_b is not None else "—", w_rat) +
+        cmp_row("💬 Reviews",         f"{int(rev_a):,}" if rev_a is not None else "—", f"{int(rev_b):,}" if rev_b is not None else "—", w_rev) +
+        cmp_row("📊 Google Score",    f"{gs_a:.2f}"   if gs_a is not None else "—", f"{gs_b:.2f}"   if gs_b is not None else "—", w_gs) +
+        cmp_row("⭐ Yelp Rating",     sv(ra,"Yelp_Rating"),  sv(rb,"Yelp_Rating")) +
+        cmp_row("⚠️ Threat Level",   f"{int(thr_a)}/5" if thr_a is not None else "—", f"{int(thr_b)}/5" if thr_b is not None else "—", w_thr) +
+        cmp_row("📏 Distance (mi)",   f"{dist_a:.1f}" if dist_a is not None else "—", f"{dist_b:.1f}" if dist_b is not None else "—", w_dist) +
+        cmp_row("🏥 Daily Volume",    sv(ra,"Estimated_Daily_Volume"), sv(rb,"Estimated_Daily_Volume"))
+    )
+
+    # Section: Services
+    services_rows = (
+        cmp_row("💻 Telehealth",   sv(ra,"Telehealth"),  sv(rb,"Telehealth")) +
+        cmp_row("🏠 Home Care",    sv(ra,"Home_Care"),   sv(rb,"Home_Care")) +
+        cmp_row("🌍 Languages",    tags_compare(sv(ra,"Languages_Spoken")), tags_compare(sv(rb,"Languages_Spoken"))) +
+        cmp_row("⚕️ Specializations", tags_compare(sv(ra,"Specializations")), tags_compare(sv(rb,"Specializations"))) +
+        cmp_row("🔧 Key Equipment", tags_compare(sv(ra,"Key_Equipment")), tags_compare(sv(rb,"Key_Equipment")))
+    )
+
+    # Section: Schedule
+    schedule_rows = (
+        cmp_row("⏰ Total Hrs/Wk",   f"{hrs_a:.0f}h"  if hrs_a is not None else "—", f"{hrs_b:.0f}h"  if hrs_b is not None else "—", w_hrs) +
+        cmp_row("📅 Weekend Hrs/Wk", f"{wknd_a:.0f}h" if wknd_a is not None else "—", f"{wknd_b:.0f}h" if wknd_b is not None else "—", w_wknd) +
+        cmp_row("🗓️ Weekday Hrs/Wk", sv(ra,"Weekday Hrs/Wk"), sv(rb,"Weekday Hrs/Wk")) +
+        "".join(cmp_row(day, helpers.day_hours(ra, day), helpers.day_hours(rb, day)) for day in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
+    )
+
+    # Section: Insurance
+    ins_rows = (
+        cmp_row("🛡️ Insurances", tags_compare(sv(ra,"_insurance")), tags_compare(sv(rb,"_insurance"))) +
+        cmp_row("📝 Notes", sv(ra,"Insurance_Verification_Notes"), sv(rb,"Insurance_Verification_Notes"))
+    )
+
+    # Section: Intelligence
+    intel_rows = (
+        cmp_row("🎯 USP",       sv(ra,"Unique_Selling_Proposition_USP"), sv(rb,"Unique_Selling_Proposition_USP")) +
+        cmp_row("📋 Notes",     sv(ra,"Competitor Notes"), sv(rb,"Competitor Notes")) +
+        cmp_row("🤖 RAG Summary",sv(ra,"RAG_Summary"),    sv(rb,"RAG_Summary")) +
+        cmp_row("✓ Strengths",  sv(ra,"Strengths"),        sv(rb,"Strengths")) +
+        cmp_row("✗ Weaknesses", sv(ra,"Weaknesses"),       sv(rb,"Weaknesses"))
+    )
+
+    def detail_section(icon, title, rows_html):
+        return (
+f'<div class="cmp-section">'
+f'<div class="cmp-section-hdr">'
+f'<span class="cmp-section-icon">{icon}</span>'
+f'<span class="cmp-section-title">{title}</span>'
+f'</div>'
+f'<div class="cmp-detail-header">'
+f'<div class="cmp-detail-name-a">{"👑 " if overall_winner=="a" else ""}{chosen_a}</div>'
+f'<div class="cmp-detail-name-mid"> </div>'
+f'<div class="cmp-detail-name-b">{"👑 " if overall_winner=="b" else ""}{chosen_b}</div>'
+f'</div>'
+f'{rows_html}'
+f'</div>'
+        )
+
+    st.markdown(
+        detail_section("🏢", "Identity & Location", identity_rows) +
+        detail_section("📊", "Ratings & Scores", scores_rows) +
+        detail_section("⚕️", "Services & Capabilities", services_rows) +
+        detail_section("🕐", "Schedule & Hours", schedule_rows) +
+        detail_section("🛡️", "Insurance Coverage", ins_rows) +
+        detail_section("🔍", "Competitive Intelligence", intel_rows),
+        unsafe_allow_html=True,
+    )
+
+    # ── Quick-open profile buttons ──
+    st.write("")
+    bl, br = st.columns(2)
+    with bl:
+        if st.button(f"📋 Open Full Profile: {chosen_a[:30]}…", key="cmp_open_a", use_container_width=True):
+            open_clinic(chosen_a)
+    with br:
+        if st.button(f"📋 Open Full Profile: {chosen_b[:30]}…", key="cmp_open_b", use_container_width=True):
+            open_clinic(chosen_b)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  PROFILE PAGE
@@ -322,9 +698,9 @@ if st.session_state.page == "profile" and st.session_state.clinic:
 
         st.write("")
         c_str, c_wk = st.columns(2)
-        with c_str: 
+        with c_str:
             st.markdown(f'<div class="info-card" style="border-top:3px solid #10B981;"><div class="info-card-title" style="color:#10B981;">✓ Strengths</div><div class="info-card-body" style="white-space:pre-wrap;">{helpers.v(r,"Strengths")}</div></div>', unsafe_allow_html=True)
-        with c_wk: 
+        with c_wk:
             st.markdown(f'<div class="info-card" style="border-top:3px solid #EF4444;"><div class="info-card-title" style="color:#EF4444;">✗ Weaknesses</div><div class="info-card-body" style="white-space:pre-wrap;">{helpers.v(r,"Weaknesses")}</div></div>', unsafe_allow_html=True)
 
         st.write("")
@@ -366,12 +742,12 @@ if st.session_state.page == "profile" and st.session_state.clinic:
         with cl:
             st.markdown('<div class="chart-card"><div class="chart-hdr"><span class="chart-hdr-title">Rating Comparison</span><span class="chart-hdr-sub">vs same area</span></div><div class="chart-body">', unsafe_allow_html=True)
             cn  = adf["Clinic Name"].tolist()
-            rb  = adf["_rating"].tolist()
+            rb2 = adf["_rating"].tolist()
             iu  = adf["_is_us"].tolist()
             bc2 = ["#2563EB" if u else "#E2E8F0" for u in iu]
             bb2 = ["#2563EB" if u else "#94A3B8" for u in iu]
             fig_rb = go.Figure(go.Bar(
-                x=rb, y=cn, orientation="h",
+                x=rb2, y=cn, orientation="h",
                 marker=dict(color=bc2, line=dict(color=bb2, width=1)), hovertemplate="<b>%{y}</b>: %{x:.1f}⭐<extra></extra>",
             ))
             fig_rb.update_layout(
@@ -412,7 +788,7 @@ if st.session_state.page == "profile" and st.session_state.clinic:
 
     with t5:
         st.write("")
-        chips = "".join(f'<div class="di"><div class="di-lbl">{d}</div><div class="di-val" style="font-size:12px;">{helpers.day_hours(r, d)}</div></div>' for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+        chips2 = "".join(f'<div class="di"><div class="di-lbl">{d}</div><div class="di-val" style="font-size:12px;">{helpers.day_hours(r, d)}</div></div>' for d in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
         st.markdown(f"""
         <div class="info-card">
             <div class="info-card-title">Weekly Hours</div>
@@ -421,7 +797,7 @@ if st.session_state.page == "profile" and st.session_state.clinic:
                 <div class="di"><div class="di-lbl">Weekend Hrs</div><div class="di-val">{helpers.v(r,"Weekend Hrs/Wk")}</div></div>
                 <div class="di"><div class="di-lbl">Weekend Advantage</div><div class="di-val">{helpers.v(r,"Weekend_Advantage")}</div></div>
             </div>
-            <div class="dg">{chips}</div>
+            <div class="dg">{chips2}</div>
         </div>
         """, unsafe_allow_html=True)
         st.write("")
@@ -537,7 +913,6 @@ if st.session_state.page == "map":
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 #  DASHBOARD
 # ═════════════════════════════════════════════════════════════════════════════
@@ -567,16 +942,31 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="map-cta-banner">
-    <div class="map-cta-icon">🗺️</div>
-    <div class="map-cta-text">
-        <div class="map-cta-title">Explore the Interactive Market Map</div>
-        <div class="map-cta-sub">Plot all {len(df)} clinics across NYC, filter by area / threat / insurance, and click any pin to pull up full competitive intelligence in a side panel.</div>
+# ── CTA Banners ──
+col_map, col_cmp = st.columns(2)
+with col_map:
+    st.markdown(f"""
+    <div class="map-cta-banner">
+        <div class="map-cta-icon">🗺️</div>
+        <div class="map-cta-text">
+            <div class="map-cta-title">Interactive Market Map</div>
+            <div class="map-cta-sub">Plot all {len(df)} clinics across NYC, filter by area / threat / insurance.</div>
+        </div>
     </div>
-</div>
-""", unsafe_allow_html=True)
-if st.button("🗺️  OPEN LIVE MARKET MAP  →", type="primary", width="stretch", key="goto_map_btn"): go_map()
+    """, unsafe_allow_html=True)
+    if st.button("🗺️  OPEN LIVE MARKET MAP  →", type="primary", use_container_width=True, key="goto_map_btn"): go_map()
+
+with col_cmp:
+    st.markdown(f"""
+    <div class="map-cta-banner" style="border-color:rgba(168,184,255,.55);box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 60px rgba(168,184,255,.12);">
+        <div class="map-cta-icon">⚔️</div>
+        <div class="map-cta-text">
+            <div class="map-cta-title">Clinic Head-to-Head</div>
+            <div class="map-cta-sub">Pick any two clinics for a full side-by-side competitive breakdown.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("⚔️  COMPARE TWO CLINICS  →", use_container_width=True, key="goto_cmp_btn"): go_compare()
 
 st.write("")
 st.markdown('<div class="sec-hdr"><div class="sec-title">Market Analytics</div><div class="sec-pill">NYC Physical Therapy Landscape</div></div>', unsafe_allow_html=True)
