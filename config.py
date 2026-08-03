@@ -13,25 +13,26 @@ SF_SCHEMA     = "LOGGING"
 SF_ROLE       = "BI_TEAM_MEMBER"
 SF_TABLE      = "CLINICS_DATA"
 
+import os
+import tempfile
 
-#  
 env_key = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
 
 if env_key:
     #  
     temp_key_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
-    
-    #  
     formatted_key = env_key.replace("\\n", "\n") 
-    
     temp_key_file.write(formatted_key.encode('utf-8'))
     temp_key_file.close()
-    
-    #  
     PRIVATE_KEY_PATH = temp_key_file.name
 else:
-    #  
-    PRIVATE_KEY_PATH = r"D:\yousef\Downloads\data_Keys_private_key_pkcs8.pem"
+    # 
+    if os.name == 'nt': 
+        # 
+        PRIVATE_KEY_PATH = r"D:\yousef\Downloads\data_Keys_private_key_pkcs8.pem"
+    else:
+        #  الـ 
+        raise ValueError("SNOWFLAKE_PRIVATE_KEY is missing from Railway environment variables! Please add it and redeploy.")
 # ─────────────────────────────────────────────────────────────────────────────
 #  PLOTLY BASE LAYOUT
 # ─────────────────────────────────────────────────────────────────────────────
