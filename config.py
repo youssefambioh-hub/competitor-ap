@@ -3,6 +3,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  SNOWFLAKE CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
+import os
+import tempfile
 SF_USER       = "YOUSEF_24"
 SF_ACCOUNT    = "DWDONOX-HK36448"
 SF_WAREHOUSE  = "COMPUTE_WH"
@@ -10,8 +12,26 @@ SF_DATABASE   = "EXTERNAL_DATA"
 SF_SCHEMA     = "LOGGING"
 SF_ROLE       = "BI_TEAM_MEMBER"
 SF_TABLE      = "CLINICS_DATA"
-PRIVATE_KEY_PATH = r"D:\yousef\Downloads\data_Keys_private_key_pkcs8.pem"
 
+
+#  
+env_key = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
+
+if env_key:
+    #  
+    temp_key_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pem")
+    
+    #  
+    formatted_key = env_key.replace("\\n", "\n") 
+    
+    temp_key_file.write(formatted_key.encode('utf-8'))
+    temp_key_file.close()
+    
+    #  
+    PRIVATE_KEY_PATH = temp_key_file.name
+else:
+    #  
+    PRIVATE_KEY_PATH = r"D:\yousef\Downloads\data_Keys_private_key_pkcs8.pem"
 # ─────────────────────────────────────────────────────────────────────────────
 #  PLOTLY BASE LAYOUT
 # ─────────────────────────────────────────────────────────────────────────────
